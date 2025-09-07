@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live TV Channels</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            color: white;
+        }
+        
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+        
+        .search-container {
+            margin-bottom: 30px;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .search-input {
+            flex: 1;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            background: rgba(255,255,255,0.9);
+            backdrop-filter: blur(10px);
+        }
+        
+        .group-filter {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 25px;
+            background: rgba(255,255,255,0.9);
+            backdrop-filter: blur(10px);
+            font-size: 16px;
+            cursor: pointer;
+        }
+        
+        .channels-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        
+        .channel-card {
+            background: rgba(255,255,255,0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .channel-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 40px rgba(0,0,0,0.2);
+        }
+        
+        .channel-logo {
+            width: 60px;
+            height: 60px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            object-fit: cover;
+        }
+        
+        .channel-name {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #333;
+        }
+        
+        .channel-group {
+            font-size: 0.9rem;
+            color: #666;
+            margin-bottom: 15px;
+            padding: 4px 12px;
+            background: #f0f0f0;
+            border-radius: 12px;
+            display: inline-block;
+        }
+        
+        .play-button {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        .play-button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .loading {
+            text-align: center;
+            color: white;
+            font-size: 1.2rem;
+            margin: 50px 0;
+        }
+        
+        .error {
+            background: #ff6b6b;
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        @media (max-width: 768px) {
+            .channels-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .search-container {
+                flex-direction: column;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📺 Live TV Channels</h1>
+            <p>Watch your favorite TV channels online</p>
+        </div>
+        
+        <div class="search-container">
+            <input type="text" class="search-input" placeholder="Search channels..." id="searchInput">
+            <select class="group-filter" id="groupFilter">
+                <option value="">All Groups</option>
+            </select>
+        </div>
+        
+        <div id="loading" class="loading">Loading channels...</div>
+        <div id="error" class="error" style="display: none;"></div>
+        <div id="channelsContainer" class="channels-grid" style="display: none;"></div>
+    </div>
+
+    <script>
+        class LiveTVApp {
+            constructor() {
+                this.channels = [];
+                this.filteredChannels = [];
+                this.groups = new Set();
+                this.init();
+            }
+            
+            async init() {
+                try {
+                    await this.loadChannels();
+                    this.setupEventListeners();
+                    this.renderChannels();
+                    this.populateGroupFilter();
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('channelsContainer').style.display = 'grid';
+                } catch (error) {
+                    this.showError('Failed to load channels: ' + error.message);
+                }
+            }
+            
+            async loadChannels() {
+                try {
+                    const response = await fetch('test.m3u8');
+                    const m3u8Content = await response.text();
+                    this.parseM3U8(m3u8Content);
+                } catch (error) {
+                    throw new Error('Unable to fetch channel list');
+                }
+            }
+            
+            parseM3U8(content) {
+                const lines = content.split('\n');
+                let currentChannel = null;
+                
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    
+                    if (line.startsWith('#EXTINF:')) {
+                        const match = line.match(/group-title="([^"]*)".*tvg-logo="([^"]*)".*,(.*)$/);
+                        if (match) {
+                            currentChannel = {
+                                group: match[1] || 'Uncategorized',
+                                logo: match[2] || 'https://via.placeholder.com/60x60?text=TV',
+                                name: match[3].trim()
+                            };
+                            this.groups.add(currentChannel.group);
+                        }
+                    } else if (line.startsWith('http') && currentChannel) {
+                        currentChannel.url = line;
+                        this.channels.push(currentChannel);
+                        currentChannel = null;
+                    }
+                }
+                
+                this.filteredChannels = [...this.channels];
+            }
+            
+            setupEventListeners() {
+                const searchInput = document.getElementById('searchInput');
+                const groupFilter = document.getElementById('groupFilter');
+                
+                searchInput.addEventListener('input', () => this.filterChannels());
+                groupFilter.addEventListener('change', () => this.filterChannels());
+            }
+            
+            filterChannels() {
+                const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+                const selectedGroup = document.getElementById('groupFilter').value;
+                
+                this.filteredChannels = this.channels.filter(channel => {
+                    const matchesSearch = channel.name.toLowerCase().includes(searchTerm);
+                    const matchesGroup = !selectedGroup || channel.group === selectedGroup;
+                    return matchesSearch && matchesGroup;
+                });
+                
+                this.renderChannels();
+            }
+            
+            populateGroupFilter() {
+                const groupFilter = document.getElementById('groupFilter');
+                const sortedGroups = Array.from(this.groups).sort();
+                
+                sortedGroups.forEach(group => {
+                    const option = document.createElement('option');
+                    option.value = group;
+                    option.textContent = group;
+                    groupFilter.appendChild(option);
+                });
+            }
+            
+            renderChannels() {
+                const container = document.getElementById('channelsContainer');
+                container.innerHTML = '';
+                
+                if (this.filteredChannels.length === 0) {
+                    container.innerHTML = '<p style="color: white; text-align: center; grid-column: 1/-1;">No channels found</p>';
+                    return;
+                }
+                
+                this.filteredChannels.forEach(channel => {
+                    const channelCard = this.createChannelCard(channel);
+                    container.appendChild(channelCard);
+                });
+            }
+            
+            createChannelCard(channel) {
+                const card = document.createElement('div');
+                card.className = 'channel-card';
+                
+                card.innerHTML = `
+                    <img src="${channel.logo}" alt="${channel.name}" class="channel-logo" 
+                         onerror="this.src='https://via.placeholder.com/60x60?text=TV'">
+                    <div class="channel-name">${channel.name}</div>
+                    <div class="channel-group">${channel.group}</div>
+                    <button class="play-button" onclick="app.playChannel('${channel.url}', '${channel.name}')">
+                        ▶ Play Channel
+                    </button>
+                `;
+                
+                return card;
+            }
+            
+            playChannel(url, name) {
+                if (navigator.userAgent.includes('Mobile')) {
+                    window.open(url, '_blank');
+                } else {
+                    const confirmed = confirm(`Open ${name} in your media player?`);
+                    if (confirmed) {
+                        window.open(url, '_blank');
+                    }
+                }
+            }
+            
+            showError(message) {
+                const errorDiv = document.getElementById('error');
+                const loadingDiv = document.getElementById('loading');
+                
+                loadingDiv.style.display = 'none';
+                errorDiv.textContent = message;
+                errorDiv.style.display = 'block';
+            }
+        }
+        
+        const app = new LiveTVApp();
+    </script>
+</body>
+</html>
